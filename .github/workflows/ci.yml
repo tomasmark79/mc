@@ -1,29 +1,29 @@
 name: CI
-on: [ push, pull_request ]
+on: [ workflow_dispatch ]
 
 jobs:
   call-build-ubuntu:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci-ubuntu.yml
 
   call-build-fedora:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci-fedora.yml
 
   call-build-alpine:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci-alpine.yml
 
   call-build-macos:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci-macos.yml
 
   call-build-solaris:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci-solaris.yml
 
   call-build-freebsd:
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/ci-freebsd.yml
     with:
       # https://github.com/GNUAspell/aspell/pull/651

@@ -1,5 +1,5 @@
 {
-  description = "Personal Midnight Commander fork with DotName customizations";
+  description = "Modern Midnight Commander with DotName skins and enhanced file actions";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 

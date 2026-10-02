@@ -7,7 +7,7 @@ if HAVE_TESTS
     SUBDIRS += tests
 endif
 
-EXTRA_DIST = 
+EXTRA_DIST = README.md dotname/VERSION dotname/README.md dotname/tests/run.py
 
 dist_noinst_SCRIPTS = \
     build-glib2.sh \
