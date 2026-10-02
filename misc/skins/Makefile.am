@@ -1,6 +1,10 @@
 skindir = $(pkgdatadir)/skins
 
 skin_DATA = \
+	dotname-light.ini \
+	dotname-dark.ini \
+	dotname-light-root.ini \
+	dotname-dark-root.ini \
 	dark.ini \
 	darkfar.ini \
 	default.ini \
