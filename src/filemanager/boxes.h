@@ -20,6 +20,7 @@
 
 void configure_box (void);
 void appearance_box (void);
+void skin_cycle (gboolean forward);
 void panel_options_box (void);
 int panel_listing_box (WPanel * p, int num, char **user, char **mini, gboolean * use_msformat,
                        int *brief_cols);

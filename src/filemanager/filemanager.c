@@ -1284,6 +1284,10 @@ midnight_execute_cmd (Widget *sender, long command)
     case CK_OptionsLayout:
         layout_box ();
         break;
+    case CK_SkinNext:
+    case CK_SkinPrev:
+        skin_cycle (command == CK_SkinNext);
+        break;
     case CK_OptionsAppearance:
         appearance_box ();
         break;

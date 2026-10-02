@@ -151,13 +151,15 @@ configure_callback (Widget *w, Widget *sender, widget_msg_t msg, int parm, void 
 
 /* --------------------------------------------------------------------------------------------- */
 
-static void
+static gboolean
 skin_apply (const gchar *skin_override)
 {
     GError *mcerror = NULL;
 
+    gboolean success;
+
     mc_skin_deinit ();
-    mc_skin_init (skin_override, &mcerror);
+    success = mc_skin_init (skin_override, &mcerror);
     mc_fhl_free (&mc_filehighlight);
     mc_filehighlight = mc_fhl_new (TRUE);
     dlg_set_default_colors ();
@@ -169,6 +171,7 @@ skin_apply (const gchar *skin_override)
     repaint_screen ();
 
     mc_error_message (&mcerror, NULL);
+    return success;
 }
 
 /* --------------------------------------------------------------------------------------------- */
@@ -622,6 +625,79 @@ configure_box (void)
 
         g_free (time_out_new);
     }
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+void
+skin_cycle (gboolean forward)
+{
+    gchar *path, *contents = NULL, **lines, *previous;
+    GPtrArray *favorites;
+    GError *error = NULL;
+    guint i, next;
+    gint current = -1;
+
+    /* Reload the list each time so changes do not require restarting MC. */
+    path = g_build_filename (mc_config_get_path (), "skin-cycle", NULL);
+    if (!g_file_get_contents (path, &contents, NULL, &error))
+    {
+        message (D_ERROR, MSG_ERROR, "Unable to read skin list %s:\n%s", path, error->message);
+        g_clear_error (&error);
+        g_free (path);
+        return;
+    }
+
+    favorites = g_ptr_array_new ();
+    lines = g_strsplit (contents, "\n", -1);
+    for (i = 0; lines[i] != NULL; i++)
+    {
+        gchar *name = g_strstrip (lines[i]);
+        guint j;
+
+        if (*name == '\0' || *name == '#')
+            continue;
+        for (j = 0; j < favorites->len; j++)
+            if (strcmp (name, g_ptr_array_index (favorites, j)) == 0)
+                break;
+        if (j == favorites->len)
+            g_ptr_array_add (favorites, name);
+    }
+
+    if (favorites->len == 0)
+    {
+        message (D_ERROR, MSG_ERROR, "Skin list %s is empty.", path);
+        goto done;
+    }
+
+    for (i = 0; i < favorites->len; i++)
+        if (strcmp (mc_skin__default.name, g_ptr_array_index (favorites, i)) == 0)
+        {
+            current = (gint) i;
+            break;
+        }
+
+    if (current < 0)
+        next = forward ? 0 : favorites->len - 1;
+    else if (forward)
+        next = ((guint) current + 1) % favorites->len;
+    else
+        next = ((guint) current + favorites->len - 1) % favorites->len;
+
+    /* On failure, restore the previous appearance without saving the invalid skin. */
+    previous = g_strdup (mc_skin__default.name);
+    if (skin_apply (g_ptr_array_index (favorites, next)))
+        mc_config_set_string (mc_global.main_config, CONFIG_APP_SECTION, "skin",
+                              g_ptr_array_index (favorites, next));
+    else
+        skin_apply (previous);
+    g_free (previous);
+
+  done:
+    g_ptr_array_free (favorites, TRUE);
+    g_strfreev (lines);
+    g_free (contents);
+    g_free (path);
 }
 
 /* --------------------------------------------------------------------------------------------- */

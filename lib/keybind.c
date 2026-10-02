@@ -194,6 +194,8 @@ static name_keymap_t command_names[] = {
 #endif
     ADD_KEYMAP_NAME (OptionsLayout),
     ADD_KEYMAP_NAME (OptionsAppearance),
+    ADD_KEYMAP_NAME (SkinNext),
+    ADD_KEYMAP_NAME (SkinPrev),
     ADD_KEYMAP_NAME (Link),
     ADD_KEYMAP_NAME (SetupListingFormat),
     ADD_KEYMAP_NAME (PanelListing),

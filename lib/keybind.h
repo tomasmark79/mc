@@ -163,6 +163,8 @@ enum
     CK_Jobs,
     CK_OptionsLayout,
     CK_OptionsAppearance,
+    CK_SkinNext,
+    CK_SkinPrev,
     CK_Link,
     CK_PanelListing,
     CK_ListMode,
