@@ -22,6 +22,18 @@ shell_patterns=0
 #   %0f   don't quote expanded macro
 ##############################################################################
 
+c       Copy full path (Alt+Shift+F)
+        @MC_CLIPBOARD@ path %f
+
+p       Copy parent directory path (Alt+Shift+D)
+        @MC_CLIPBOARD@ directory %f
+
+N       Copy item name (Alt+Shift+N)
+        @MC_CLIPBOARD@ name %f
+
+f       Copy item to clipboard (Alt+Shift+C)
+        @MC_CLIPBOARD@ file %f
+
 + ! t t
 @       Do something on the current file
         CMD=%{Enter command}

@@ -108,7 +108,8 @@ static const global_keymap_ini_t default_filemanager_keymap[] = {
     {"Copy", "f5"},
     {"Move", "f6"},
     {"MakeDir", "f7"},
-    {"Delete", "f8"},
+    {"Delete", "f8; shift-delete"},
+    {"Trash", "delete; f12"},
     {"Menu", "f9"},
     {"Quit", "f10"},
     {"MenuLastSelected", "f19"},
@@ -122,6 +123,10 @@ static const global_keymap_ini_t default_filemanager_keymap[] = {
     {"PutCurrentSelected", "alt-enter; ctrl-enter"},
     {"PutCurrentFullSelected", "ctrl-shift-enter"},
     {"CdQuick", "alt-c"},
+    {"ClipboardPath", "alt-shift-f"},
+    {"ClipboardDirectory", "alt-shift-d"},
+    {"ClipboardName", "alt-shift-n"},
+    {"ClipboardFile", "alt-shift-c"},
     /* To access the directory hotlist */
     {"HotList", "ctrl-backslash"},
     /* Suspend */

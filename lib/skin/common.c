@@ -81,7 +81,7 @@ mc_skin_get_default_name (void)
 
     /*  from config. Or 'default' if no present in config */
     return mc_config_get_string (mc_global.main_config, CONFIG_APP_SECTION, "skin",
-                                 geteuid () == 0 ? "dotname-light" : "default");
+                                 "dotname-light");
 }
 
 /* --------------------------------------------------------------------------------------------- */
