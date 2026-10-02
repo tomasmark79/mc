@@ -1,0 +1,8 @@
+t Move selected items to trash
+    set -- %s
+    for item do
+        case "$item" in
+            ""|.|..|/) exit 0 ;;
+        esac
+    done
+    gio trash -- "$@"

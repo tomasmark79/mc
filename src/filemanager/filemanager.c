@@ -1431,7 +1431,11 @@ midnight_execute_cmd (Widget *sender, long command)
             query_set_sel (0);
             if (query_dialog ("Trash", "Move selected items to trash?", D_ERROR,
                               2, "&Yes", "&No") == 0)
-                (void) user_menu_cmd (NULL, "@MC_TRASH_MENU@", 0);
+            {
+                char *menu = g_build_filename (mc_global.share_data_dir, "mc-trash.menu", NULL);
+                (void) user_menu_cmd (NULL, menu, 0);
+                g_free (menu);
+            }
         }
         break;
     case CK_View:
@@ -1445,7 +1449,11 @@ midnight_execute_cmd (Widget *sender, long command)
     case CK_ClipboardName:
     case CK_ClipboardFile:
         if (get_current_type () == view_listing)
-            (void) user_menu_cmd (NULL, "@MC_CLIPBOARD_MENU@", command - CK_ClipboardPath);
+        {
+            char *menu = g_build_filename (mc_global.share_data_dir, "mc-clipboard.menu", NULL);
+            (void) user_menu_cmd (NULL, menu, command - CK_ClipboardPath);
+            g_free (menu);
+        }
         break;
     case CK_EditorViewerHistory:
         show_editor_viewer_history ();

@@ -1,0 +1,8 @@
+p Copy full path
+    "@MC_CLIPBOARD@" path %f
+d Copy parent directory path
+    "@MC_CLIPBOARD@" directory %f
+n Copy item name
+    "@MC_CLIPBOARD@" name %f
+f Copy item to clipboard
+    "@MC_CLIPBOARD@" file %f

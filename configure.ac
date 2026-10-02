@@ -502,6 +502,10 @@ fi
 AC_SUBST(EXTHELPERSDIR)
 AC_SUBST(EXTFSHELPERSDIR)
 
+ dnl Install the clipboard helper alongside MC on every distribution.
+eval MC_CLIPBOARD=\"${bindir}/mc-clipboard\"
+AC_SUBST(MC_CLIPBOARD)
+
 
 dnl ############################################################################
 dnl Documentation
@@ -593,6 +597,8 @@ contrib/Makefile
 misc/Makefile
 misc/mc.charsets
 misc/mc.menu
+misc/mc-clipboard.menu
+misc/mc-clipboard:misc/mc-clipboard.py
 misc/mcedit.menu
 misc/skins/Makefile
 misc/ext.d/Makefile

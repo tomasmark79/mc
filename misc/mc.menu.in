@@ -23,16 +23,16 @@ shell_patterns=0
 ##############################################################################
 
 c       Copy full path (Alt+Shift+F)
-        @MC_CLIPBOARD@ path %f
+        "@MC_CLIPBOARD@" path %f
 
 p       Copy parent directory path (Alt+Shift+D)
-        @MC_CLIPBOARD@ directory %f
+        "@MC_CLIPBOARD@" directory %f
 
 N       Copy item name (Alt+Shift+N)
-        @MC_CLIPBOARD@ name %f
+        "@MC_CLIPBOARD@" name %f
 
 f       Copy item to clipboard (Alt+Shift+C)
-        @MC_CLIPBOARD@ file %f
+        "@MC_CLIPBOARD@" file %f
 
 + ! t t
 @       Do something on the current file
