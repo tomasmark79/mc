@@ -27,6 +27,7 @@
 #include <config.h>
 
 #include <string.h>
+#include <unistd.h>
 
 #include "lib/global.h"         /* <glib.h> */
 
@@ -146,8 +147,8 @@ mc_skin_list (void)
 
 /* --------------------------------------------------------------------------------------------- */
 
-gboolean
-mc_skin_ini_file_load (mc_skin_t *mc_skin)
+static gboolean
+mc_skin_ini_file_load_raw (mc_skin_t *mc_skin)
 {
     char *file_name;
 
@@ -175,6 +176,28 @@ mc_skin_ini_file_load (mc_skin_t *mc_skin)
 
     /* /usr/share/mc/skins/ */
     return mc_skin_ini_file_load_search_in_dir (mc_skin, mc_global.share_data_dir);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
+gboolean
+mc_skin_ini_file_load (mc_skin_t *mc_skin)
+{
+    gchar *logical_name;
+    gboolean loaded;
+
+    /* Use effective process privileges, including sudo, su, and direct login. */
+    if (geteuid () != 0
+        || (strcmp (mc_skin->name, "dotname-light") != 0
+            && strcmp (mc_skin->name, "dotname-dark") != 0))
+        return mc_skin_ini_file_load_raw (mc_skin);
+
+    logical_name = mc_skin->name;
+    mc_skin->name = g_strconcat (logical_name, "-root", NULL);
+    loaded = mc_skin_ini_file_load_raw (mc_skin);
+    g_free (mc_skin->name);
+    mc_skin->name = logical_name;
+    return loaded;
 }
 
 /* --------------------------------------------------------------------------------------------- */

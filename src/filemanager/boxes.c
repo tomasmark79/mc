@@ -642,10 +642,19 @@ skin_cycle (gboolean forward)
     path = g_build_filename (mc_config_get_path (), "skin-cycle", NULL);
     if (!g_file_get_contents (path, &contents, NULL, &error))
     {
-        message (D_ERROR, MSG_ERROR, "Unable to read skin list %s:\n%s", path, error->message);
-        g_clear_error (&error);
-        g_free (path);
-        return;
+        /* A new account can switch skins without its own configuration. */
+        if (g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+        {
+            g_clear_error (&error);
+            contents = g_strdup ("dotname-light\ndotname-dark\n");
+        }
+        else
+        {
+            message (D_ERROR, MSG_ERROR, "Unable to read skin list %s:\n%s", path, error->message);
+            g_clear_error (&error);
+            g_free (path);
+            return;
+        }
     }
 
     favorites = g_ptr_array_new ();

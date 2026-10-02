@@ -100,6 +100,7 @@ typedef struct global_keymap_ini_t
 /* midnight */
 static const global_keymap_ini_t default_filemanager_keymap[] = {
     {"ChangePanel", "tab; ctrl-i"},
+    {"SkinNext", "alt-shift-t"},
     {"Help", "f1"},
     {"UserMenu", "f2"},
     {"View", "f3"},

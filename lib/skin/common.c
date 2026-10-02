@@ -27,6 +27,7 @@
 
 #include <config.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "internal.h"
 #include "lib/util.h"
@@ -79,7 +80,8 @@ mc_skin_get_default_name (void)
         return g_strdup (tmp_str);
 
     /*  from config. Or 'default' if no present in config */
-    return mc_config_get_string (mc_global.main_config, CONFIG_APP_SECTION, "skin", "default");
+    return mc_config_get_string (mc_global.main_config, CONFIG_APP_SECTION, "skin",
+                                 geteuid () == 0 ? "dotname-light" : "default");
 }
 
 /* --------------------------------------------------------------------------------------------- */
@@ -125,6 +127,23 @@ mc_skin_init (const gchar *skin_override, GError **mcerror)
 
     mc_skin__default.name =
         skin_override != NULL ? g_strdup (skin_override) : mc_skin_get_default_name ();
+
+    /* Keep the base name so switching and saving work for both account types. */
+    if ((geteuid () == 0 && strcmp (mc_skin__default.name, "default") == 0)
+        || strcmp (mc_skin__default.name, "dotname-light-root") == 0
+        || strcmp (mc_skin__default.name, "dotname-light.ini") == 0
+        || strcmp (mc_skin__default.name, "dotname-light-root.ini") == 0)
+    {
+        g_free (mc_skin__default.name);
+        mc_skin__default.name = g_strdup ("dotname-light");
+    }
+    else if (strcmp (mc_skin__default.name, "dotname-dark-root") == 0
+             || strcmp (mc_skin__default.name, "dotname-dark.ini") == 0
+             || strcmp (mc_skin__default.name, "dotname-dark-root.ini") == 0)
+    {
+        g_free (mc_skin__default.name);
+        mc_skin__default.name = g_strdup ("dotname-dark");
+    }
 
     mc_skin__default.colors = g_hash_table_new_full (g_str_hash, g_str_equal,
                                                      g_free, mc_skin_hash_destroy_value);
