@@ -96,6 +96,7 @@ static name_keymap_t command_names[] = {
     ADD_KEYMAP_NAME (Menu),
     ADD_KEYMAP_NAME (MenuLastSelected),
     ADD_KEYMAP_NAME (UserMenu),
+    ADD_KEYMAP_NAME (Trash),
     ADD_KEYMAP_NAME (EditUserMenu),
     ADD_KEYMAP_NAME (Search),
     ADD_KEYMAP_NAME (SearchContinue),

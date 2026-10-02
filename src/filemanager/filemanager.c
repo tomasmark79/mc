@@ -1409,6 +1409,27 @@ midnight_execute_cmd (Widget *sender, long command)
     case CK_UserMenu:
         user_file_menu_cmd ();
         break;
+    case CK_Trash:
+        if (get_current_type () == view_listing)
+        {
+            if (current_panel->marked == 0)
+            {
+                const file_entry_t *fe = panel_current_entry (current_panel);
+
+                if (fe == NULL)
+                    break;
+                if (DIR_IS_DOTDOT (fe->fname->str))
+                {
+                    message (D_ERROR, MSG_ERROR, _("Cannot operate on \"..\"!"));
+                    break;
+                }
+            }
+            query_set_sel (0);
+            if (query_dialog ("Trash", "Move selected items to trash?", D_ERROR,
+                              2, "&Yes", "&No") == 0)
+                (void) user_menu_cmd (NULL, "@MC_TRASH_MENU@", 0);
+        }
+        break;
     case CK_View:
         view_cmd (current_panel);
         break;
@@ -1587,6 +1608,11 @@ midnight_callback (Widget *w, Widget *sender, widget_msg_t msg, int parm, void *
     case MSG_UNHANDLED_KEY:
         {
             cb_ret_t v = MSG_NOT_HANDLED;
+
+            /* Plain Delete edits a nonempty command line before considering trash. */
+            if (parm == KEY_DC && command_prompt && !is_cmdline_mute ()
+                && !input_is_empty (cmdline))
+                return send_message (cmdline, NULL, MSG_KEY, parm, NULL);
 
             command = widget_lookup_key (w, parm);
             if (command != CK_IgnoreKey)

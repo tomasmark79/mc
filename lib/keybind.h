@@ -74,6 +74,7 @@ enum
     CK_Menu,
     CK_MenuLastSelected,
     CK_UserMenu,
+    CK_Trash,
     CK_EditUserMenu,
     CK_Search,
     CK_SearchContinue,
