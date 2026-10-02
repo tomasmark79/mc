@@ -1436,6 +1436,13 @@ midnight_execute_cmd (Widget *sender, long command)
     case CK_ViewFile:
         view_file_cmd (current_panel);
         break;
+    case CK_ClipboardPath:
+    case CK_ClipboardDirectory:
+    case CK_ClipboardName:
+    case CK_ClipboardFile:
+        if (get_current_type () == view_listing)
+            (void) user_menu_cmd (NULL, "@MC_CLIPBOARD_MENU@", command - CK_ClipboardPath);
+        break;
     case CK_EditorViewerHistory:
         show_editor_viewer_history ();
         break;
