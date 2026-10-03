@@ -19,8 +19,6 @@ use the 256-color palette and do not require `COLORTERM=truecolor`.
 | Copy parent directory path | `Alt+Shift+D` |
 | Copy item name | `Alt+Shift+N` |
 | Copy item to clipboard | `Alt+Shift+C` |
-| Quick change directory | `Alt+C` |
-| Page up | `Alt+V`, `PageUp` |
 
 Clipboard actions operate on the item under the cursor, whether a file or a
 directory. `Alt+Shift+D` copies the path of that item's parent directory.
@@ -62,7 +60,7 @@ The tests cover:
 - Deleting command-line characters with `Delete` and returning to the trash
   action once the line is empty; preserving `F12`, `F8`, and `Shift+Delete`.
 - Invoking the clipboard helper through all four default shortcuts and the F2
-  menu, while preserving `Alt+C` for changing directories.
+  menu.
 - Clipboard helper payloads for all four modes, MIME types, spaces, Unicode,
   symbolic links, process errors, timeouts, and interrupts.
 
