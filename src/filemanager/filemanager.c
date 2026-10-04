@@ -84,6 +84,7 @@
 #include "src/consaver/cons.saver.h"    /* show_console_contents */
 #include "src/file_history.h"   /* show_file_history() */
 
+#include "file.h"
 #include "filemanager.h"
 
 /*** global variables ****************************************************************************/
@@ -1416,21 +1417,7 @@ midnight_execute_cmd (Widget *sender, long command)
     case CK_Trash:
         if (get_current_type () == view_listing)
         {
-            if (current_panel->marked == 0)
-            {
-                const file_entry_t *fe = panel_current_entry (current_panel);
-
-                if (fe == NULL)
-                    break;
-                if (DIR_IS_DOTDOT (fe->fname->str))
-                {
-                    message (D_ERROR, MSG_ERROR, _("Cannot operate on \"..\"!"));
-                    break;
-                }
-            }
-            query_set_sel (0);
-            if (query_dialog ("Trash", "Move selected items to trash?", D_ERROR,
-                              2, "&Yes", "&No") == 0)
+            if (panel_confirm_trash (current_panel))
             {
                 char *menu = g_build_filename (mc_global.share_data_dir, "mc-trash.menu", NULL);
                 (void) user_menu_cmd (NULL, menu, 0);

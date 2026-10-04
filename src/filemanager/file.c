@@ -1879,7 +1879,7 @@ check_single_entry (const WPanel *panel, gboolean force_single, struct stat *src
 
 static char *
 panel_operate_generate_prompt (const WPanel *panel, FileOperation operation,
-                               const struct stat *src_stat)
+                               const struct stat *src_stat, const char *operation_name)
 {
     char *sp;
     char *format_string;
@@ -1927,7 +1927,9 @@ panel_operate_generate_prompt (const WPanel *panel, FileOperation operation,
     cp = (src_stat != NULL ? one_format : many_format);
 
     /* 1. Substitute %o */
-    format_string = str_replace_all (cp, "%o", op_names1[(int) operation]);
+    format_string = str_replace_all (cp, "%o",
+                                            operation_name != NULL ? operation_name
+                                                                   : op_names1[(int) operation]);
 
     /* 2. Substitute %n */
     cp = operation == OP_DELETE ? "\n" : " ";
@@ -1999,7 +2001,7 @@ do_confirm_copy_move (const WPanel *panel, gboolean force_single, const char *so
         src_stat = NULL;
 
     /* Generate confirmation prompt */
-    format = panel_operate_generate_prompt (panel, ctx->operation, src_stat);
+    format = panel_operate_generate_prompt (panel, ctx->operation, src_stat, NULL);
 
     ret = file_mask_dialog (ctx, source != NULL, format,
                             source != NULL ? source : (const void *) &panel->marked, dest_dir,
@@ -2014,7 +2016,8 @@ do_confirm_copy_move (const WPanel *panel, gboolean force_single, const char *so
 /* --------------------------------------------------------------------------------------------- */
 
 static gboolean
-do_confirm_erase (const WPanel *panel, const char *source, struct stat *src_stat)
+do_confirm_erase (const WPanel *panel, const char *source, struct stat *src_stat,
+                  gboolean trash)
 {
     int i;
     char *format;
@@ -2024,7 +2027,8 @@ do_confirm_erase (const WPanel *panel, const char *source, struct stat *src_stat
         src_stat = NULL;
 
     /* Generate confirmation prompt */
-    format = panel_operate_generate_prompt (panel, OP_DELETE, src_stat);
+    format = panel_operate_generate_prompt (panel, OP_DELETE, src_stat,
+                                            trash ? _("Trash") : NULL);
 
     if (source == NULL)
         g_snprintf (fmd_buf, sizeof (fmd_buf), format, panel->marked);
@@ -2038,10 +2042,10 @@ do_confirm_erase (const WPanel *panel, const char *source, struct stat *src_stat
 
     g_free (format);
 
-    if (safe_delete)
-        query_set_sel (1);
+    query_set_sel (safe_delete ? 1 : 0);
 
-    i = query_dialog (op_names[OP_DELETE], fmd_buf, D_ERROR, 2, _("&Yes"), _("&No"));
+    i = query_dialog (trash ? _("Trash") : op_names[OP_DELETE], fmd_buf, D_ERROR,
+                      2, _("&Yes"), _("&No"));
 
     return (i == 0);
 }
@@ -3507,6 +3511,26 @@ compute_dir_size (const vfs_path_t *dirname_vpath, dirsize_status_msg_t *sm,
 }
 
 /* --------------------------------------------------------------------------------------------- */
+/* Use native selection checks, prompt formatting, and safe-delete focus for trash. */
+gboolean
+panel_confirm_trash (void *source_panel)
+{
+    WPanel *panel = PANEL (source_panel);
+    const char *source = NULL;
+    struct stat src_stat;
+
+    if (panel->marked <= 1)
+    {
+        source = check_single_entry (panel, FALSE, &src_stat);
+        if (source == NULL)
+            return FALSE;
+    }
+
+    return do_confirm_erase (panel, source, &src_stat, TRUE);
+}
+
+/* --------------------------------------------------------------------------------------------- */
+
 /**
  * panel_operate:
  *
@@ -3575,7 +3599,7 @@ panel_operate (void *source_panel, FileOperation operation, gboolean force_singl
 
         dest_vpath = vfs_path_from_str (dest);
     }
-    else if (confirm_delete && !do_confirm_erase (panel, source, &src_stat))
+    else if (confirm_delete && !do_confirm_erase (panel, source, &src_stat, FALSE))
     {
         ret_val = FALSE;
         goto ret_fast;

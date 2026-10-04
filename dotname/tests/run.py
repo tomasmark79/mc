@@ -19,7 +19,7 @@ HELPER = os.environ["MC_TEST_HELPER"]
 
 class Session:
     def __init__(self, directory, skin=None, root=False, args=(), envskin=None,
-                 keymap="", truecolor=True):
+                 keymap="", truecolor=True, safe_delete=False):
         self.base = Path(directory)
         self.socket = str(self.base / "tmux.sock")
         self.config = self.base / "config/mc"
@@ -31,6 +31,9 @@ class Session:
                 "[Midnight-Commander]\nskin=" + skin
                 + "\nconfirm_exit=false\nauto_save_setup=true\npause_after_run=0\n"
             )
+        if safe_delete:
+            config = self.config / "ini"
+            config.write_text(config.read_text() + "safe_delete=true\n")
         if keymap:
             (self.config / "mc.keymap").write_text(keymap)
         self.left, self.right = self.base / "left", self.base / "right"
@@ -119,10 +122,10 @@ class RuntimeTests(unittest.TestCase):
                         self.assertNotIn("COLORTERM", screen)
                         self.assertNotIn("48;2;", screen)
                         s.keys("Down", "DC")
-                        s.wait(lambda t: "Move selected items to trash?" in t,
+                        s.wait(lambda t: "Trash file" in t,
                                "The trash dialog did not open without truecolor")
                         s.keys("Escape")
-                        s.wait(lambda t: "Move selected items to trash?" not in t,
+                        s.wait(lambda t: "Trash file" not in t,
                                "The trash dialog did not close")
                 finally:
                     s.stop()
@@ -194,7 +197,7 @@ class RuntimeTests(unittest.TestCase):
             with self.subTest(key=key):
                 s.keys("Home", key)
                 screen = s.wait(lambda t: error in t, "Missing parent directory error")
-                self.assertNotIn("Move selected items to trash?", screen)
+                self.assertNotIn("Trash file", screen)
                 self.assertTrue(s.file.exists())
                 self.assertFalse((s.base / "data/Trash").exists())
                 s.keys("Enter")
@@ -202,23 +205,69 @@ class RuntimeTests(unittest.TestCase):
 
         # Marked files take precedence over the cursor, including on "..".
         s.keys("Down", "Insert", "Home", "DC")
-        s.wait(lambda t: "Move selected items to trash?" in t,
+        s.wait(lambda t: "Trash file" in t,
                "The parent entry incorrectly blocked a marked file")
         s.keys("Escape")
-        s.wait(lambda t: "Move selected items to trash?" not in t,
+        s.wait(lambda t: "Trash file" not in t,
                "The trash dialog did not close")
+        self.assertTrue(s.file.exists())
+
+    def test_trash_dialog_details(self):
+        cases = [
+            ([('café file.txt', False)], 'file', False),
+            ([('folder', True)], 'directory', False),
+            ([('first.txt', False), ('second.txt', False)], '2 files', True),
+            ([('first', True), ('second', True)], '2 directories', True),
+            ([('folder', True), ('file.txt', False)], '2 files/directories', True),
+        ]
+        for index, (items, detail, marked) in enumerate(cases):
+            with self.subTest(detail=detail):
+                s = Session(Path(self.tmp.name) / str(index))
+                try:
+                    s.color('light')
+                    s.file.unlink()
+                    for name, directory in items:
+                        path = s.left / name
+                        path.mkdir() if directory else path.write_text('keep me')
+                    s.keys('C-r', 'Home', 'Down')
+                    s.wait(lambda t: items[0][0] in t, 'Panel did not reload')
+                    if marked:
+                        for _ in items:
+                            s.keys('Insert')
+                        s.keys('Home')
+                    for key, verb in [('F8', 'Delete'), ('DC', 'Trash')]:
+                        s.keys(key)
+                        screen = s.wait(lambda t: verb + ' ' + detail in t,
+                                        'Missing selection details for ' + verb)
+                        if not marked:
+                            self.assertIn('"' + items[0][0] + '"?', screen)
+                        s.keys('Escape')
+                        s.wait(lambda t: verb + ' ' + detail not in t,
+                               'The confirmation dialog did not close')
+                    for name, _ in items:
+                        self.assertTrue((s.left / name).exists())
+                finally:
+                    s.stop()
+
+    def test_trash_safe_delete(self):
+        s = self.session(skin='dotname-light', safe_delete=True)
+        s.color('light')
+        s.keys('Down', 'DC')
+        s.wait(lambda t: 'Trash file' in t, 'Missing trash confirmation')
+        s.keys('Enter')
+        s.wait(lambda t: 'Trash file' not in t, 'The dialog did not close')
         self.assertTrue(s.file.exists())
 
     def test_trash_cancel_and_confirm(self):
         s = self.session()
         s.color("light")
         s.keys("Down", "DC")
-        s.wait(lambda t: "Move selected items to trash?" in t, "Missing trash confirmation")
+        s.wait(lambda t: "Trash file" in t, "Missing trash confirmation")
         s.keys("Escape")
-        s.wait(lambda t: "Move selected items to trash?" not in t, "The dialog did not close")
+        s.wait(lambda t: "Trash file" not in t, "The dialog did not close")
         self.assertTrue(s.file.exists())
         s.keys("F12")
-        s.wait(lambda t: "Move selected items to trash?" in t, "Missing trash confirmation")
+        s.wait(lambda t: "Trash file" in t, "Missing trash confirmation")
         s.keys("Enter")
         deadline = time.monotonic() + 8
         trash = s.base / "data/Trash/files" / s.file.name
@@ -242,8 +291,8 @@ class RuntimeTests(unittest.TestCase):
         s.keys("C-e", "DC", "__end__")
         screen = s.wait(lambda t: "cho caf__end__" in t,
                         "Delete at the end of the command interrupted typing")
-        self.assertNotIn("Move selected items to trash?", screen)
-        for key, message in (("F12", "Move selected items to trash?"),
+        self.assertNotIn("Trash file", screen)
+        for key, message in (("F12", "Trash file"),
                              ("F8", "Delete file"), ("S-DC", "Delete file")):
             s.keys(key)
             s.wait(lambda t: message in t, "Missing confirmation for " + key)
@@ -252,7 +301,7 @@ class RuntimeTests(unittest.TestCase):
             self.assertTrue(s.file.exists())
         # Even a single space belongs to the command; removing it restores the trash action.
         s.keys("C-a", "C-k", "Space", "C-a", "DC", "DC")
-        s.wait(lambda t: "Move selected items to trash?" in t,
+        s.wait(lambda t: "Trash file" in t,
                "Delete did not open trash after the command line was cleared")
         s.keys("Escape")
         self.assertTrue(s.file.exists())

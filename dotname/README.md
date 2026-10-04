@@ -30,6 +30,11 @@ the same error as native deletion. Marked files still take precedence over
 the cursor position. `F12` opens the trash confirmation even while
 a command is being entered.
 
+Trash confirmation uses the same dialog formatting as native deletion: item
+type and name for a single selection, or counts for files, directories, and
+mixed selections. Long names are shortened in the same way. The `safe_delete`
+setting selects No by default for both operations.
+
 User configuration can override these defaults. Bookmarks, history, and other
 personal settings remain user data. Clipboard actions require an accessible
 Wayland session; running as root does not automatically grant desktop access.
