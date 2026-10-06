@@ -33,6 +33,7 @@ The first command runs MC, the second builds it and creates a `result` symlink,
 and the third adds it to your user profile. Nix also works on Debian and other
 Linux distributions. The flake exposes `x86_64-linux` and `aarch64-linux` packages;
 binary availability depends on a cache or your own builder.
+The Nix package includes libzip and enables direct ZIP reading for F5 copies.
 
 Add this input to your NixOS flake:
 
@@ -55,7 +56,8 @@ Example dependencies and source build:
 ```bash
 sudo apt-get install git build-essential autoconf automake libtool pkg-config \
   gettext autopoint libglib2.0-dev libslang2-dev libssh2-1-dev libgpm-dev \
-  libx11-dev libext2fs-dev libaspell-dev python3 libglib2.0-bin wl-clipboard
+  libx11-dev libext2fs-dev libaspell-dev libzip-dev python3 libglib2.0-bin \
+  wl-clipboard perl zip unzip
 
 git clone --branch mc-modern https://github.com/tomasmark79/mc.git
 cd mc
@@ -64,6 +66,19 @@ cd mc
 make -j"$(nproc)"
 make install
 "$HOME/.local/bin/mc"
+```
+
+ZIP extraction through F5 uses the fast direct-reading path when `configure`
+finds libzip >= 1.0 through pkg-config. Install `libzip-dev` before configuring
+and compiling MC. Without it, the build still succeeds, but ZIP copies use the
+slower external helper and temporary files. Installing the library after MC
+has been built does not enable the fast path: rerun `./configure`, `make`, and
+`make install`. The `zip` and `unzip` tools are still needed for helper operations.
+
+After configuring, verify that direct ZIP reading was enabled:
+
+```bash
+grep '^#define HAVE_LIBZIP 1' config.h
 ```
 
 Installing into `~/.local` requires no root privileges and does not overwrite

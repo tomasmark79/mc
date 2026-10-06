@@ -50,6 +50,10 @@
 #include <errno.h>
 #include <sys/wait.h>
 
+#ifdef HAVE_LIBZIP
+#include <zip.h>
+#endif
+
 #include "lib/global.h"
 #include "lib/fileloc.h"
 #include "lib/mcconfig.h"
@@ -85,6 +89,12 @@ struct extfs_super_t
     int fstype;
     char *local_name;
     char *cache_name;
+#ifdef HAVE_LIBZIP
+    zip_t *zip_archive;
+    GHashTable *zip_names;
+    struct stat zip_stat;
+    pid_t zip_pid;
+#endif
     struct stat local_stat;
     dev_t rdev;
 };
@@ -96,9 +106,20 @@ typedef struct
     gboolean need_archive;
 } extfs_plugin_info_t;
 
+typedef struct
+{
+    vfs_file_handler_t base;
+#ifdef HAVE_LIBZIP
+    zip_file_t *zip_file;
+#endif
+} extfs_file_handler_t;
+
 /*** forward declarations (file scope functions) *************************************************/
 
 static struct vfs_s_entry *extfs_resolve_symlinks_int (struct vfs_s_entry *entry, GSList * list);
+#ifdef HAVE_LIBZIP
+static void extfs_zip_reset (struct extfs_super_t *archive);
+#endif
 
 /*** file scope variables ************************************************************************/
 
@@ -369,6 +390,9 @@ extfs_free_archive (struct vfs_class *me, struct vfs_s_super *psup)
 
     (void) me;
 
+#ifdef HAVE_LIBZIP
+    extfs_zip_reset (archive);
+#endif
     if (archive->cache_name != NULL)
     {
         const char *suffixes[] = { "", ".dir", ".pag" };
@@ -947,6 +971,140 @@ extfs_get_archive_name (const struct extfs_super_t *archive)
 }
 
 /* --------------------------------------------------------------------------------------------- */
+#ifdef HAVE_LIBZIP
+static void
+extfs_zip_reset (struct extfs_super_t *archive)
+{
+    if (archive->zip_archive != NULL)
+        zip_discard (archive->zip_archive);
+    archive->zip_archive = NULL;
+    if (archive->zip_names != NULL)
+        g_hash_table_destroy (archive->zip_names);
+    archive->zip_names = NULL;
+}
+
+/* Match uzip's slash collapsing and first run of ./ or ../ components. */
+static char *
+extfs_zip_canonical_name (const char *name)
+{
+    GString *result;
+    const char *p;
+    size_t i;
+
+    result = g_string_new ("");
+    for (p = name; *p != '\0'; p++)
+        if (*p != '/' || result->len == 0 || result->str[result->len - 1] != '/')
+            g_string_append_c (result, *p);
+    for (i = 0; i < result->len; i++)
+        if (i == 0 || result->str[i - 1] == '/')
+        {
+            size_t end = i;
+
+            while (result->str[end] == '.')
+                if (result->str[end + 1] == '/')
+                    end += 2;
+                else if (result->str[end + 1] == '.' && result->str[end + 2] == '/')
+                    end += 3;
+                else
+                    break;
+            if (end != i)
+            {
+                g_string_erase (result, i, end - i);
+                break;
+            }
+        }
+    return g_string_free (result, FALSE);
+}
+
+static gboolean
+extfs_zip_same_archive (const struct stat *a, const struct stat *b)
+{
+    if (a->st_dev != b->st_dev || a->st_ino != b->st_ino || a->st_size != b->st_size
+        || a->st_mtime != b->st_mtime || a->st_ctime != b->st_ctime)
+        return FALSE;
+#if defined(HAVE_STRUCT_STAT_ST_MTIM)
+    return a->st_mtim.tv_nsec == b->st_mtim.tv_nsec && a->st_ctim.tv_nsec == b->st_ctim.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_MTIMESPEC)
+    return a->st_mtimespec.tv_nsec == b->st_mtimespec.tv_nsec
+        && a->st_ctimespec.tv_nsec == b->st_ctimespec.tv_nsec;
+#elif defined(HAVE_STRUCT_STAT_ST_MTIMENSEC)
+    return a->st_mtimensec == b->st_mtimensec && a->st_ctimensec == b->st_ctimensec;
+#else
+    return TRUE;
+#endif
+}
+
+static zip_file_t *
+extfs_zip_open (struct extfs_super_t *archive, const struct vfs_s_entry *entry)
+{
+    const extfs_plugin_info_t *info;
+    char *archive_name, *entry_name;
+    struct stat st;
+    zip_int64_t count, i, *index;
+    zip_stat_t entry_stat;
+
+    info = &g_array_index (extfs_plugins, extfs_plugin_info_t, archive->fstype);
+    /* User-supplied extfs helpers retain control of their contents. */
+    if (strcmp (info->prefix, "uzip") != 0 || strcmp (info->path, LIBEXECDIR "extfs.d/") != 0)
+        return NULL;
+    archive_name = extfs_get_archive_name (archive);
+    if (stat (archive_name, &st) != 0)
+    {
+        g_free (archive_name);
+        return NULL;
+    }
+    if (archive->zip_archive != NULL
+        && (archive->zip_pid != getpid () || !extfs_zip_same_archive (&archive->zip_stat, &st)))
+        extfs_zip_reset (archive);
+    if (archive->zip_archive == NULL)
+    {
+        archive->zip_archive = zip_open (archive_name, ZIP_RDONLY, NULL);
+        if (archive->zip_archive != NULL)
+        {
+            archive->zip_stat = st;
+            archive->zip_pid = getpid ();
+            archive->zip_names = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, g_free);
+            count = zip_get_num_entries (archive->zip_archive, 0);
+            for (i = 0; i < count; i++)
+            {
+                const char *name;
+                char *canonical;
+
+                name = zip_get_name (archive->zip_archive, i, ZIP_FL_ENC_RAW);
+                if (name == NULL)
+                    continue;
+                canonical = extfs_zip_canonical_name (name);
+                index = g_hash_table_lookup (archive->zip_names, canonical);
+                if (index != NULL)
+                {
+                    /* Duplicate/aliased names keep the helper's original semantics. */
+                    *index = -1;
+                    g_free (canonical);
+                }
+                else
+                {
+                    index = g_new (zip_int64_t, 1);
+                    *index = i;
+                    g_hash_table_insert (archive->zip_names, canonical, index);
+                }
+            }
+        }
+    }
+    g_free (archive_name);
+    if (archive->zip_archive == NULL)
+        return NULL;
+    entry_name = extfs_get_path_from_entry (entry);
+    index = g_hash_table_lookup (archive->zip_names, entry_name);
+    g_free (entry_name);
+    if (index == NULL || *index < 0
+        || zip_stat_index (archive->zip_archive, *index, 0, &entry_stat) != 0
+        || (entry_stat.valid & ZIP_STAT_SIZE) == 0
+        || entry_stat.size != (zip_uint64_t) entry->ino->st.st_size)
+        return NULL;
+    return zip_fopen_index (archive->zip_archive, *index, 0);
+}
+#endif
+
 /** Don't pass localname as NULL */
 
 static int
@@ -1084,6 +1242,7 @@ extfs_run (const vfs_path_t *vpath)
 static void *
 extfs_open (const vfs_path_t *vpath, int flags, mode_t mode)
 {
+    extfs_file_handler_t *handler;
     vfs_file_handler_t *extfs_info;
     struct extfs_super_t *archive = NULL;
     const char *q;
@@ -1111,6 +1270,25 @@ extfs_open (const vfs_path_t *vpath, int flags, mode_t mode)
     if (S_ISDIR (entry->ino->st.st_mode))
         ERRNOR (EISDIR, NULL);
 
+#ifdef HAVE_LIBZIP
+    if (!created && entry->ino->localname == NULL && IS_LINEAR (flags))
+    {
+        zip_file_t *zip_file;
+
+        zip_file = extfs_zip_open (archive, entry);
+        if (zip_file != NULL)
+        {
+            extfs_file_handler_t *file;
+
+            file = g_new0 (extfs_file_handler_t, 1);
+            file->zip_file = zip_file;
+            extfs_info = &file->base;
+            vfs_s_init_fh (extfs_info, entry->ino, FALSE);
+            extfs_info->handle = -1;
+            goto register_handle;
+        }
+    }
+#endif
     if (entry->ino->localname == NULL)
     {
         vfs_path_t *local_filename_vpath;
@@ -1147,10 +1325,14 @@ extfs_open (const vfs_path_t *vpath, int flags, mode_t mode)
     if (local_handle == -1)
         ERRNOR (EIO, NULL);
 
-    extfs_info = g_new (vfs_file_handler_t, 1);
+    handler = g_new0 (extfs_file_handler_t, 1);
+    extfs_info = &handler->base;
     vfs_s_init_fh (extfs_info, entry->ino, created);
     extfs_info->handle = local_handle;
 
+#ifdef HAVE_LIBZIP
+  register_handle:
+#endif
     /* i.e. we had no open files and now we have one */
     vfs_rmstamp (vfs_extfs_ops, (vfsid) archive);
     VFS_SUPER (archive)->fd_usage++;
@@ -1164,6 +1346,18 @@ extfs_read (void *fh, char *buffer, size_t count)
 {
     vfs_file_handler_t *file = VFS_FILE_HANDLER (fh);
 
+#ifdef HAVE_LIBZIP
+    if (((extfs_file_handler_t *) fh)->zip_file != NULL)
+    {
+        zip_int64_t result;
+
+        result = zip_fread (((extfs_file_handler_t *) fh)->zip_file, buffer, count);
+        if (result < 0)
+            ERRNOR (EIO, -1);
+        file->pos += result;
+        return result;
+    }
+#endif
     return read (file->handle, buffer, count);
 }
 
@@ -1175,7 +1369,15 @@ extfs_close (void *fh)
     vfs_file_handler_t *file = VFS_FILE_HANDLER (fh);
     int errno_code = 0;
 
-    close (file->handle);
+#ifdef HAVE_LIBZIP
+    if (((extfs_file_handler_t *) fh)->zip_file != NULL)
+    {
+        if (zip_fclose (((extfs_file_handler_t *) fh)->zip_file) != 0)
+            errno_code = EIO;
+    }
+    else
+#endif
+        close (file->handle);
     file->handle = -1;
 
     /* Commit the file if it has changed */
@@ -1531,6 +1733,14 @@ extfs_lseek (void *fh, off_t offset, int whence)
 {
     vfs_file_handler_t *file = VFS_FILE_HANDLER (fh);
 
+#ifdef HAVE_LIBZIP
+    if (((extfs_file_handler_t *) fh)->zip_file != NULL)
+    {
+        if (whence == SEEK_SET && offset == 0 && file->pos == 0)
+            return 0;
+        ERRNOR (ESPIPE, -1);
+    }
+#endif
     return lseek (file->handle, offset, whence);
 }
 

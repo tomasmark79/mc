@@ -4,6 +4,7 @@ DIST_SUBDIRS = helpers
 AM_CPPFLAGS = \
 	-DLIBEXECDIR=\""$(libexecdir)/@PACKAGE@/"\" \
 	$(GLIB_CFLAGS) \
+	$(LIBZIP_CFLAGS) \
 	-I$(top_srcdir)
 
 noinst_LTLIBRARIES = libvfs-extfs.la

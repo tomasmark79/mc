@@ -5,6 +5,7 @@
   gettext,
   python3,
   glib,
+  libzip,
   wl-clipboard,
 }:
 mc.overrideAttrs (old: {
@@ -12,6 +13,7 @@ mc.overrideAttrs (old: {
   src = lib.cleanSource ../.;
   # The fork source tree already includes the custom changes.
   patches = [ ];
+  buildInputs = (old.buildInputs or [ ]) ++ [ libzip ];
   nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
     autoreconfHook
     gettext

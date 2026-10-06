@@ -4,12 +4,14 @@ import configparser
 import importlib.util
 import io
 import os
+import shutil
 from pathlib import Path
 import shlex
 import subprocess
 import tempfile
 import time
 import unittest
+import zipfile
 from unittest.mock import MagicMock, patch
 
 
@@ -19,7 +21,7 @@ HELPER = os.environ["MC_TEST_HELPER"]
 
 class Session:
     def __init__(self, directory, skin=None, root=False, args=(), envskin=None,
-                 keymap="", truecolor=True, safe_delete=False):
+                 keymap="", truecolor=True, safe_delete=False, extra_env=None):
         self.base = Path(directory)
         self.socket = str(self.base / "tmux.sock")
         self.config = self.base / "config/mc"
@@ -57,6 +59,8 @@ class Session:
         env.update(XDG_RUNTIME_DIR=str(runtime), WAYLAND_DISPLAY=str(runtime / "missing-wayland"))
         if envskin:
             env["MC_SKIN"] = envskin
+        if extra_env:
+            env.update(extra_env)
         command = (["unshare", "--user", "--map-root-user", "--"] if root else [])
         command += [BINARY, "-u", *args, str(self.left), str(self.right)]
         subprocess.run(["tmux", "-f", "/dev/null", "-S", self.socket,
@@ -107,6 +111,159 @@ class RuntimeTests(unittest.TestCase):
         s = Session(self.tmp.name, **kwargs)
         self.addCleanup(s.stop)
         return s
+
+    def test_zip_f5_streaming_and_cleanup(self):
+        s = self.session(skin="dotname-light")
+        s.file.unlink()
+        archive = s.left / "many-files.zip"
+        files = {f"folder/file-{i:04d}.txt": f"contents {i}\n".encode()
+                 for i in range(500)}
+        files["folder/space [*?].txt"] = b"special name\n"
+        files["folder/empty.txt"] = b""
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            for name, data in files.items():
+                info = zipfile.ZipInfo(name)
+                info.external_attr = 0o100644 << 16
+                compression = zipfile.ZIP_STORED if name.endswith("0.txt") else zipfile.ZIP_DEFLATED
+                z.writestr(info, data, compress_type=compression)
+        # Refresh the panel, enter the archive, and copy its directory with F5.
+        s.keys("C-r")
+        s.wait(lambda t: "many-files.zip" in t, "ZIP archive is missing")
+        s.keys("Home", "Down", "Enter")
+        s.wait(lambda t: "uzip://" in t and "folder" in t, "ZIP panel did not open")
+        s.keys("Home", "Down", "F5")
+        s.wait(lambda t: "source mask:" in t and "folder" in t, "Copy dialog did not open")
+        s.keys("Enter")
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline:
+            if all((s.right / name).is_file() and (s.right / name).read_bytes() == data
+                   for name, data in files.items()):
+                break
+            time.sleep(.1)
+        for name, data in files.items():
+            self.assertEqual((s.right / name).read_bytes(), data)
+        s.wait(lambda t: "Source" not in t and "source mask:" not in t,
+               "Copy did not finish")
+        self.assertFalse(list(s.base.glob("mc-*/extfs-cache*.pag")), "F5 used the ZIP helper")
+        self.assertFalse([p for p in s.base.glob("mc-*/extfs*")
+                          if not p.name.startswith("extfs-cache")], "F5 extracted temporary files")
+        s.keys("F10")
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline and list(s.base.glob("mc-*/extfs-cache*")):
+            time.sleep(.05)
+        self.assertFalse(list(s.base.glob("mc-*/extfs-cache*")), "ZIP index was not cleaned up")
+
+    def zip_with_file(self, archive, contents, compression=zipfile.ZIP_DEFLATED):
+        with zipfile.ZipFile(archive, "w", compression=compression) as z:
+            info = zipfile.ZipInfo("file.txt")
+            info.external_attr = 0o100644 << 16
+            z.writestr(info, contents, compress_type=compression)
+
+    def open_zip_panel(self, s, archive):
+        s.tmux("send-keys", "-t", "test", "-l", "cd " + str(archive) + "/uzip://")
+        s.keys("Enter")
+        s.wait(lambda t: "uzip://" in t and "file.txt" in t, "ZIP panel did not open")
+
+    def copy_zip_file(self, s, expected):
+        s.keys("Home", "Down", "F5")
+        s.wait(lambda t: "source mask:" in t, "Copy dialog did not open")
+        s.keys("Enter")
+        output = s.right / "file.txt"
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if output.is_file() and output.read_bytes() == expected:
+                break
+            time.sleep(.05)
+        self.assertEqual(output.read_bytes(), expected)
+        s.wait(lambda t: "Source" not in t and "source mask:" not in t, "Copy did not finish")
+
+    def test_zip_streaming_invalidation(self):
+        s = self.session(skin="dotname-light")
+        archive = s.left / "changing.zip"
+        self.zip_with_file(archive, b"first")
+        self.open_zip_panel(s, archive)
+        self.copy_zip_file(s, b"first")
+        before = archive.stat()
+        self.zip_with_file(archive, b"later")
+        self.assertEqual(archive.stat().st_size, before.st_size)
+        os.utime(archive, ns=(before.st_atime_ns, before.st_mtime_ns))
+        (s.right / "file.txt").unlink()
+        self.copy_zip_file(s, b"later")
+
+    def test_zip_streaming_crc_error(self):
+        s = self.session(skin="dotname-light")
+        archive = s.left / "broken.zip"
+        self.zip_with_file(archive, b"contents", zipfile.ZIP_STORED)
+        with zipfile.ZipFile(archive) as z:
+            info = z.infolist()[0]
+            offset = info.header_offset + 30 + len(info.filename.encode()) + len(info.extra)
+        with archive.open("r+b") as f:
+            f.seek(offset)
+            f.write(b"X")
+        self.open_zip_panel(s, archive)
+        s.keys("Home", "Down", "F5")
+        s.wait(lambda t: "source mask:" in t, "Copy dialog did not open")
+        s.keys("Enter")
+        s.wait(lambda t: "Cannot read source file" in t, "ZIP CRC error was not reported")
+
+    def test_zip_custom_helper_fallback(self):
+        helper_dir = Path(self.tmp.name) / "data/mc/extfs.d"
+        helper_dir.mkdir(parents=True)
+        helper = Path(BINARY).resolve().parents[1] / "libexec/mc/extfs.d/uzip"
+        shutil.copyfile(helper, helper_dir / "uzip")
+        (helper_dir / "uzip").chmod(0o700)
+        s = self.session(skin="dotname-light")
+        archive = s.left / "custom.zip"
+        self.zip_with_file(archive, b"custom helper")
+        self.open_zip_panel(s, archive)
+        self.copy_zip_file(s, b"custom helper")
+        self.assertTrue(list(s.base.glob("mc-*/extfs-cache*.pag")), "Custom ZIP helper was bypassed")
+
+    def test_zip_alias_fallback(self):
+        s = self.session(skin="dotname-light")
+        archive = s.left / "aliases.zip"
+        with zipfile.ZipFile(archive, "w") as z:
+            for name, contents in (("file.txt", b"first"), ("./file.txt", b"alias")):
+                info = zipfile.ZipInfo(name)
+                info.external_attr = 0o100644 << 16
+                z.writestr(info, contents)
+        self.open_zip_panel(s, archive)
+        self.copy_zip_file(s, b"alias")
+        self.assertTrue(list(s.base.glob("mc-*/extfs-cache*.pag")), "ZIP alias semantics were bypassed")
+
+    def test_zip_viewer_then_copy(self):
+        s = self.session(skin="dotname-light")
+        archive = s.left / "viewer.zip"
+        contents = b"ZIP viewer test contents\n"
+        self.zip_with_file(archive, contents)
+        self.open_zip_panel(s, archive)
+        s.keys("Home", "Down", "F3")
+        s.wait(lambda t: "ZIP viewer test contents" in t, "ZIP viewer did not open")
+        self.assertTrue(list(s.base.glob("mc-*/extfs-cache*.pag")), "Viewer did not use its temporary copy")
+        s.keys("F10")
+        s.wait(lambda t: "uzip://" in t and "file.txt" in t, "ZIP viewer did not close")
+        self.copy_zip_file(s, contents)
+
+    def test_zip_background_copy(self):
+        s = self.session(skin="dotname-light")
+        archive = s.left / "background.zip"
+        contents = b"background contents\n"
+        self.zip_with_file(archive, contents)
+        self.open_zip_panel(s, archive)
+        # Open the native archive in the parent before forking the copy job.
+        self.copy_zip_file(s, contents)
+        output = s.right / "file.txt"
+        output.unlink()
+        s.keys("Home", "Down", "F5")
+        s.wait(lambda t: "source mask:" in t, "Copy dialog did not open")
+        s.keys("M-b")
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            if output.is_file() and output.read_bytes() == contents:
+                break
+            time.sleep(.05)
+        self.assertEqual(output.read_bytes(), contents)
+        self.assertFalse(list(s.base.glob("mc-*/extfs-cache*.pag")), "Background copy used the helper")
 
     def test_skins_without_truecolor(self):
         for root in (False, True):

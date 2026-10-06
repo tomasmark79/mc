@@ -39,6 +39,25 @@ User configuration can override these defaults. Bookmarks, history, and other
 personal settings remain user data. Clipboard actions require an accessible
 Wayland session; running as root does not automatically grant desktop access.
 
+## ZIP extraction
+
+With libzip available at build time, F5 reads ZIP entries directly into MC's
+normal copy loop. The archive stays open between files, eliminating per-file
+helper processes and extracted temporary copies while retaining MC's selection,
+overwrite dialogs, progress, and CRC error handling. Changes to the archive
+invalidate the open index. Background jobs open their own archive handle.
+
+Viewing, editing, custom user helpers, and entries that cannot use direct
+reading retain the extfs helper. Its temporary filename index avoids listing
+the entire archive for each extraction. MC removes the index when releasing
+the archive; if caching is unavailable, the helper uses its original lookup.
+The Nix package includes libzip. Source builds detect libzip >= 1.0 through
+pkg-config during `./configure` and use the slower helper throughout when the
+library is absent. On Debian, install `libzip-dev` before building. Installing
+it after MC has been compiled does not enable direct reading; reconfigure,
+rebuild, and reinstall MC. Check for `#define HAVE_LIBZIP 1` in `config.h` after
+configuration. The `zip` and `unzip` tools remain necessary for helper operations.
+
 ## Repeatable tests
 
 Run this command from the repository directory as a regular user:
@@ -68,6 +87,11 @@ The tests cover:
   menu.
 - Clipboard helper payloads for all four modes, MIME types, spaces, Unicode,
   symbolic links, process errors, timeouts, and interrupts.
+- ZIP index reuse across helper processes, archive changes, concurrent readers,
+  long paths, special filenames, and fallback when caching is unavailable.
+- Direct F5 copying of 502 ZIP files without extracted temporary copies,
+  changed archives, CRC errors, background copying, viewing before copying,
+  custom helper and aliased-name fallback, and cache cleanup when MC exits.
 
 MC runs in a separate tmux server without the user's tmux configuration.
 Each scenario uses a temporary directory inside the home directory with its

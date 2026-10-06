@@ -26,6 +26,10 @@ AC_DEFUN([mc_VFS_EXTFS],
 		    AS_HELP_STRING([--enable-vfs-extfs], [Support for extfs filesystem @<:@yes@:>@]))
     if test "$enable_vfs" = "yes" -a x"$enable_vfs_extfs" != x"no"; then
 	mc_EXTFS_CHECKS
+        PKG_CHECK_MODULES([LIBZIP], [libzip >= 1.0], [
+            AC_DEFINE([HAVE_LIBZIP], [1], [Direct linear reading of ZIP archive entries])
+            MCLIBS="$MCLIBS $LIBZIP_LIBS"
+        ], [:])
 	enable_vfs_extfs="yes"
 	mc_VFS_ADDNAME([extfs])
 	AC_DEFINE([ENABLE_VFS_EXTFS], [1], [Support for extfs])
