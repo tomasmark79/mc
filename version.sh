@@ -61,17 +61,18 @@ PREV_MC_VERSION="unknown"
 CURR_MC_VERSION="${PREV_MC_VERSION}"
 SHOR_MC_VERSION="${PREV_MC_VERSION}"
 
-# The fork archive must retain its version without a .git directory.
-if [ -r "${src_top_dir}/dotname/VERSION" ]; then
-    CURR_MC_VERSION=`cat "${src_top_dir}/dotname/VERSION"`
-    SHOR_MC_VERSION="${CURR_MC_VERSION}"
-fi
-
 if [ -r "${VERSION_FILE}" ]
   then
     PREV_MC_VERSION=`${SED-sed} -n 's/^#define MC_CURRENT_VERSION "\(.*\)"$/\1/p' "${VERSION_FILE}"`
     CURR_MC_VERSION="${PREV_MC_VERSION}"
     SHOR_MC_VERSION="${PREV_MC_VERSION}"
+fi
+
+# Use the fork release version in both Git checkouts and source archives.
+if [ -r "${src_top_dir}/dotname/VERSION" ]; then
+    CURR_MC_VERSION=`cat "${src_top_dir}/dotname/VERSION"`
+    SHOR_MC_VERSION="${CURR_MC_VERSION}"
+    mc_print_version
 fi
 
 git_head=`git --git-dir "${src_top_dir}/.git" rev-parse --verify HEAD 2>/dev/null`
