@@ -84,6 +84,7 @@ struct extfs_super_t
 
     int fstype;
     char *local_name;
+    char *cache_name;
     struct stat local_stat;
     dev_t rdev;
 };
@@ -129,6 +130,20 @@ extfs_super_new (struct vfs_class *me, const char *name, const vfs_path_t *local
     vsuper->name = g_strdup (name);
 
     super->fstype = fstype;
+
+    /* Helpers may keep an index for the lifetime of this archive. */
+    {
+        vfs_path_t *cache_vpath;
+        int fd;
+
+        fd = vfs_mkstemps (&cache_vpath, "extfs-cache", "");
+        if (fd != -1)
+        {
+            close (fd);
+            super->cache_name = g_strdup (vfs_path_get_last_path_str (cache_vpath));
+            vfs_path_free (cache_vpath, TRUE);
+        }
+    }
 
     if (local_name_vpath != NULL)
     {
@@ -353,6 +368,22 @@ extfs_free_archive (struct vfs_class *me, struct vfs_s_super *psup)
     struct extfs_super_t *archive = EXTFS_SUPER (psup);
 
     (void) me;
+
+    if (archive->cache_name != NULL)
+    {
+        const char *suffixes[] = { "", ".dir", ".pag" };
+        size_t i;
+
+        for (i = 0; i < G_N_ELEMENTS (suffixes); i++)
+        {
+            char *path;
+
+            path = g_strconcat (archive->cache_name, suffixes[i], (char *) NULL);
+            unlink (path);
+            g_free (path);
+        }
+        g_free (archive->cache_name);
+    }
 
     if (archive->local_name != NULL)
     {
@@ -976,6 +1007,20 @@ extfs_cmd (const char *str_extfs_cmd, const struct extfs_super_t *archive,
     {
         message (D_ERROR, MSG_ERROR, _("EXTFS virtual file system:\ncannot build command"));
         return (-1);
+    }
+
+    if (archive->cache_name != NULL)
+    {
+        char *quoted_cache_name, *cached_cmd;
+
+        quoted_cache_name = name_quote (archive->cache_name, FALSE);
+        if (quoted_cache_name != NULL)
+        {
+            cached_cmd = g_strconcat ("MC_EXTFS_CACHE=", quoted_cache_name, " ", cmd, (char *) NULL);
+            g_free (quoted_cache_name);
+            g_free (cmd);
+            cmd = cached_cmd;
+        }
     }
 
     /* don't read stdout */

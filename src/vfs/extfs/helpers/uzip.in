@@ -8,6 +8,7 @@
 
 use POSIX;
 use File::Basename;
+use Fcntl qw(:DEFAULT :flock :mode);
 use strict;
 use warnings;
 
@@ -72,31 +73,108 @@ sub zipfs_canonicalize_pathname($) {
 # starting with either "./" or "../". Some ZIP files contain such names,
 # so we need to build a translation table for them.
 my $zipfs_realpathname_table = undef;
+
+# Read the original names once, either into the in-process fallback table
+# or into the persistent index supplied by MC for this open archive.
+sub zipfs_read_realpathnames {
+    my ($store) = @_;
+    open(my $zip, "$cmd_list $qarchive |") or return 0;
+    while (my $line = <$zip>) {
+        $line =~ s/\r*\n*$//;
+        my $name;
+        if ($op_has_zipinfo) {
+            $name = $14 if $line =~ $regex_zipinfo_line;
+        } else {
+            $name = $11 if $line =~ $regex_nonzipinfo_line;
+        }
+        $store->(zipfs_canonicalize_pathname($name), $name) if defined $name;
+    }
+    return close($zip);
+}
+
+sub zipfs_cache_signature {
+    my @st = Time::HiRes::stat($aarchive);
+    die "cannot stat archive" unless @st;
+    return Digest::SHA::sha256_hex(join("\0", $aarchive, @st[0, 1, 7],
+        sprintf('%.9f', $st[9]), sprintf('%.9f', $st[10]), $cmd_list,
+        map { $ENV{$_} // '' } qw(LANG LC_ALL LC_CTYPE LC_TIME TZ)));
+}
+
+# SDBM is a Perl core module and provides individual lookups without loading
+# the whole index for each extracted file. Split values to fit SDBM's pages,
+# including archive paths longer than a single page.
+sub zipfs_cached_realpathname {
+    my ($fname) = @_;
+    my $cache = $ENV{MC_EXTFS_CACHE};
+    return () unless defined $cache && $cache =~ m{^/};
+
+    my @parent = lstat(File::Basename::dirname($cache));
+    my @lockstat = lstat($cache);
+    return () unless @parent && S_ISDIR($parent[2]) && $parent[4] == $<
+        && ($parent[2] & 0777) == 0700
+        && @lockstat && S_ISREG($lockstat[2]) && $lockstat[4] == $<
+        && ($lockstat[2] & 0777) == 0600;
+    for my $suffix ('.dir', '.pag') {
+        my @st = lstat($cache . $suffix);
+        return () if @st && (!S_ISREG($st[2]) || $st[4] != $< || ($st[2] & 0777) != 0600);
+    }
+
+    # Missing modules or an unwritable/damaged cache must not prevent copying.
+    my $realname;
+    my $ok = eval {
+        require SDBM_File;
+        require Digest::SHA;
+        require Time::HiRes;
+        open(my $lock, '+<', $cache) or die "cannot open cache lock";
+        flock($lock, LOCK_EX) or die "cannot lock cache";
+        my $signature = zipfs_cache_signature();
+        my %index;
+        tie(%index, 'SDBM_File', $cache, O_RDWR | O_CREAT, 0600) or die "cannot open index";
+        if (($index{'signature'} // '') ne $signature) {
+            untie %index;
+            tie(%index, 'SDBM_File', $cache, O_RDWR | O_CREAT | O_TRUNC, 0600)
+                or die "cannot reset index";
+            zipfs_read_realpathnames(sub {
+                my ($canonical, $original) = @_;
+                my $key = Digest::SHA::sha256_hex($canonical);
+                my $parts = int((length($original) + 767) / 768) || 1;
+                for my $part (0 .. $parts - 1) {
+                    $index{"$key:$part"} = substr($original, $part * 768, 768);
+                }
+                $index{$key} = $parts;
+            }) or die "cannot list archive";
+            die "archive changed while indexing" if zipfs_cache_signature() ne $signature;
+            $index{'signature'} = $signature;
+        }
+        my $key = Digest::SHA::sha256_hex($fname);
+        my $parts = $index{$key};
+        $realname = $fname;
+        if (defined $parts) {
+            die "invalid index entry" unless $parts =~ /^\d+$/ && $parts > 0 && $parts <= 128;
+            $realname = '';
+            for my $part (0 .. $parts - 1) {
+                my $value = $index{"$key:$part"};
+                die "incomplete index entry" unless defined $value;
+                $realname .= $value;
+            }
+        }
+        untie %index;
+        1;
+    };
+    return $ok ? ($realname) : ();
+}
+
 sub zipfs_realpathname($) {
     my ($fname) = @_;
 
     if (!defined($zipfs_realpathname_table)) {
+        my @cached = zipfs_cached_realpathname($fname);
+        return $cached[0] if @cached;
         $zipfs_realpathname_table = {};
-	if (!open(ZIP, "$cmd_list $qarchive |")) {
-	    return $fname;
-	}
-	foreach my $line (<ZIP>) {
-	    $line =~ s/\r*\n*$//;
-	    if ($op_has_zipinfo) {
-		if ($line =~ $regex_zipinfo_line) {
-		    my ($fname) = ($14);
-		    $zipfs_realpathname_table->{zipfs_canonicalize_pathname($fname)} = $fname;
-		}
-	    } else {
-		if ($line =~ $regex_nonzipinfo_line) {
-		    my ($fname) = ($11);
-		    $zipfs_realpathname_table->{zipfs_canonicalize_pathname($fname)} = $fname;
-		}
-	    }
-	}
-	if (!close(ZIP)) {
-	    return $fname;
-	}
+        zipfs_read_realpathnames(sub {
+            my ($canonical, $original) = @_;
+            $zipfs_realpathname_table->{$canonical} = $original;
+        }) or return $fname;
     }
     if (exists($zipfs_realpathname_table->{$fname})) {
 	return $zipfs_realpathname_table->{$fname};
