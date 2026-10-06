@@ -10,6 +10,12 @@ four DotName skins, automatic red variants for root, and live skin switching.
 These features include default shortcuts and work without a home configuration.
 [Feature details and tests](dotname/README.md).
 
+## See it in action
+
+![Modern Midnight Commander demo](2026-10-07%2000-01-04.gif)
+
+![Modern Midnight Commander alongside the desktop file manager](2026-10-07%2000-06-08.gif)
+
 ## Nix and NixOS
 
 With Nix installed, enable `nix-command` and `flakes` in your user configuration
