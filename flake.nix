@@ -40,6 +40,23 @@
           pkgs = nixpkgs.legacyPackages.${system};
         in
         {
+          dsm-build = pkgs.mkShell {
+            packages = with pkgs; [
+              autoconf
+              automake
+              libtool
+              gettext
+              pkg-config
+              gnumake
+              curl
+              xz
+              file
+              binutils
+              python3
+              perl
+              ncurses
+            ];
+          };
           default = pkgs.mkShell {
             inputsFrom = [ self.packages.${system}.mc ];
             packages = [

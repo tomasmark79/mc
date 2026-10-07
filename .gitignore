@@ -50,3 +50,4 @@ tests/src/vfs/extfs/helpers-list/data/config.sh
 mc-version.h
 /result
 /result-*
+/dist/

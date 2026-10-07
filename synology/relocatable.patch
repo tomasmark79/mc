@@ -1,0 +1,81 @@
+--- a/src/main.c
++++ b/src/main.c
+@@ -145,7 +145,8 @@
+     else
+         mc_global.sysconfig_dir = g_strdup (SYSCONFDIR);
+ 
+-    mc_global.share_data_dir = g_strdup (DATADIR);
++    mc_global.share_data_dir =
++        g_strdup (g_getenv ("MC_SHAREDIR") != NULL ? g_getenv ("MC_SHAREDIR") : DATADIR);
+ }
+ 
+ /* --------------------------------------------------------------------------------------------- */
+@@ -266,7 +267,8 @@
+ #ifdef HAVE_SETLOCALE
+     (void) setlocale (LC_ALL, "");
+ #endif
+-    (void) bindtextdomain (PACKAGE, LOCALEDIR);
++    (void) bindtextdomain (PACKAGE, g_getenv ("MC_LOCALEDIR") != NULL
++                                       ? g_getenv ("MC_LOCALEDIR") : LOCALEDIR);
+     (void) textdomain (PACKAGE);
+ 
+     /* do this before args parsing */
+--- a/src/vfs/shell/shell.c
++++ b/src/vfs/shell/shell.c
+@@ -211,7 +211,9 @@
+     if (scr_content == NULL)
+     {
+         scr_filename =
+-            g_build_path (PATH_SEP_STR, LIBEXECDIR, VFS_SHELL_PREFIX, script_name, (char *) NULL);
++            g_build_path (PATH_SEP_STR,
++                          g_getenv ("MC_LIBEXECDIR") != NULL ? g_getenv ("MC_LIBEXECDIR") : LIBEXECDIR,
++                          VFS_SHELL_PREFIX, script_name, (char *) NULL);
+         g_file_get_contents (scr_filename, &scr_content, &scr_len, NULL);
+         g_free (scr_filename);
+     }
+--- a/src/vfs/extfs/extfs.c
++++ b/src/vfs/extfs/extfs.c
+@@ -1045,7 +1045,8 @@
+ 
+     info = &g_array_index (extfs_plugins, extfs_plugin_info_t, archive->fstype);
+     /* User-supplied extfs helpers retain control of their contents. */
+-    if (strcmp (info->prefix, "uzip") != 0 || strcmp (info->path, LIBEXECDIR "extfs.d/") != 0)
++    if (strcmp (info->prefix, "uzip") != 0 || strcmp (info->path, g_getenv ("MC_EXTFSDIR") != NULL
++                                  ? g_getenv ("MC_EXTFSDIR") : LIBEXECDIR "extfs.d/") != 0)
+         return NULL;
+     archive_name = extfs_get_archive_name (archive);
+     if (stat (archive_name, &st) != 0)
+@@ -1911,7 +1912,8 @@
+     /* 1st: scan user directory */
+     d1 = extfs_get_plugins (mc_config_get_data_path (), TRUE);  /* silent about user dir */
+     /* 2nd: scan system dir */
+-    d2 = extfs_get_plugins (LIBEXECDIR, d1);
++    d2 = extfs_get_plugins (g_getenv ("MC_LIBEXECDIR") != NULL
++                               ? g_getenv ("MC_LIBEXECDIR") : LIBEXECDIR, d1);
+ 
+     return (d1 || d2 ? 1 : 0);
+ }
+--- a/src/textconf.c
++++ b/src/textconf.c
+@@ -218,15 +218,17 @@
+     PRINTF_SECTION (_("Config directory:"), mc_global.sysconfig_dir);
+     PRINTF_SECTION (_("Data directory:"), mc_global.share_data_dir);
+ 
+-    PRINTF_SECTION (_("File extension handlers:"), EXTHELPERSDIR);
++    PRINTF_SECTION (_("File extension handlers:"), g_getenv ("MC_EXTHELPERSDIR") != NULL
++                        ? g_getenv ("MC_EXTHELPERSDIR") : EXTHELPERSDIR);
+ 
+ #if defined ENABLE_VFS_EXTFS || defined ENABLE_VFS_SHELL
+-    PRINTF_SECTION (_("VFS plugins and scripts:"), LIBEXECDIR);
++    PRINTF_SECTION (_("VFS plugins and scripts:"), g_getenv ("MC_LIBEXECDIR") != NULL
++                        ? g_getenv ("MC_LIBEXECDIR") : LIBEXECDIR);
+ #ifdef ENABLE_VFS_EXTFS
+-    PRINTF2 ("extfs.d:", LIBEXECDIR, MC_EXTFS_DIR PATH_SEP_STR);
++    PRINTF2 ("extfs.d:", g_getenv ("MC_LIBEXECDIR") != NULL ? g_getenv ("MC_LIBEXECDIR") : LIBEXECDIR, MC_EXTFS_DIR PATH_SEP_STR);
+ #endif
+ #ifdef ENABLE_VFS_SHELL
+-    PRINTF2 ("shell:", LIBEXECDIR, VFS_SHELL_PREFIX PATH_SEP_STR);
++    PRINTF2 ("shell:", g_getenv ("MC_LIBEXECDIR") != NULL ? g_getenv ("MC_LIBEXECDIR") : LIBEXECDIR, VFS_SHELL_PREFIX PATH_SEP_STR);
+ #endif
+ #endif /* ENABLE_VFS_EXTFS || defiined ENABLE_VFS_SHELL */
+     (void) puts ("");

@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+MC_BUNDLE_ROOT=$(CDPATH='' cd -- "$(dirname -- "$(readlink -f -- "$0")")/.." && pwd)
+export MC_BUNDLE_ROOT
+export MC_DATADIR="$MC_BUNDLE_ROOT/etc/mc"
+export MC_SHAREDIR="$MC_BUNDLE_ROOT/share/mc"
+export MC_LOCALEDIR="$MC_BUNDLE_ROOT/share/locale"
+export MC_LIBEXECDIR="$MC_BUNDLE_ROOT/libexec/mc/"
+export MC_EXTFSDIR="${MC_LIBEXECDIR}extfs.d/"
+export MC_EXTHELPERSDIR="${MC_LIBEXECDIR}ext.d/"
+export TERMINFO="$MC_BUNDLE_ROOT/share/terminfo"
+if [ -z "${LANG:-}" ]; then
+    export LANG=en_US.UTF-8
+fi
+case ${0##*/} in
+    mcedit|mcview|mcdiff) program=${0##*/}.bin ;;
+    *) program=mc.bin ;;
+esac
+exec "$MC_BUNDLE_ROOT/bin/$program" "$@"

@@ -98,6 +98,11 @@ MC itself also works without an accessible desktop clipboard. Personal bookmarks
 and history are not included in this repository; an existing MC profile can
 override the fork's defaults.
 
+## Synology DSM
+
+For a native Synology DSM SSH build targeting DS223j (`rtd1619b`), see the
+[build and runtime instructions](synology/README.md).
+
 ## Shell integration
 
 After installing MC so that `which mc` finds this fork, add the following to
