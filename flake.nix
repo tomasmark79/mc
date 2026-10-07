@@ -9,6 +9,8 @@
       systems = [
         "x86_64-linux"
         "aarch64-linux"
+        "x86_64-darwin"
+        "aarch64-darwin"
       ];
       eachSystem = nixpkgs.lib.genAttrs systems;
     in
@@ -22,6 +24,8 @@
         {
           inherit mc;
           default = mc;
+        }
+        // nixpkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
           mc-tests = import ./nix/tests.nix { inherit pkgs mc; };
         }
       );
@@ -45,8 +49,10 @@
             packages = [
               pkgs.python3
               pkgs.tmux
-              pkgs.util-linux
               pkgs.glib
+            ]
+            ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
+              pkgs.util-linux
               pkgs.wl-clipboard
             ];
           };

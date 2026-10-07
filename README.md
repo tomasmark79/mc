@@ -37,7 +37,8 @@ nix profile add github:tomasmark79/mc#mc
 
 The first command runs MC, the second builds it and creates a `result` symlink,
 and the third adds it to your user profile. Nix also works on Debian and other
-Linux distributions. The flake exposes `x86_64-linux` and `aarch64-linux` packages;
+Linux distributions and macOS. The flake exposes `x86_64-linux`, `aarch64-linux`,
+`x86_64-darwin` (Intel Mac), and `aarch64-darwin` (Apple Silicon) packages;
 binary availability depends on a cache or your own builder.
 The Nix package includes libzip and enables direct ZIP reading for F5 copies.
 
@@ -92,7 +93,7 @@ Installing into `~/.local` requires no root privileges and does not overwrite
 Standard `make install DESTDIR=...` is supported for system packaging.
 This fork does not currently provide prebuilt `.deb` packages or an APT repository.
 
-Clipboard actions require a running Wayland session and `wl-copy`; X11 and
+Clipboard actions require Linux with a running Wayland session and `wl-copy`; macOS, X11, and
 clipboard forwarding over SSH are not implemented. Trash actions require `gio`.
 MC itself also works without an accessible desktop clipboard. Personal bookmarks
 and history are not included in this repository; an existing MC profile can
@@ -125,7 +126,8 @@ nix build .#mc
 nix run .#mc-tests
 ```
 
-Tests require Linux with user namespaces enabled and must run as a regular user.
+The `mc-tests` package is exposed only on Linux. Tests require Linux with user
+namespaces enabled and must run as a regular user.
 They do not write to the actual desktop clipboard. To test a native build, set
 `MC_TEST_BINARY` to the absolute path of the installed MC and `MC_TEST_HELPER`
 to `misc/mc-clipboard.py`, make `python3`, `tmux`, and `unshare` available,
