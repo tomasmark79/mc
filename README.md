@@ -10,6 +10,11 @@ four DotName skins, automatic red variants for root, and live skin switching.
 These features include default shortcuts and work without a home configuration.
 [Feature details and tests](dotname/README.md).
 
+Switch between light and dark skins with `Alt+Shift+T`. On macOS, press and
+release `Esc`, then press `Shift+T` (uppercase `T`). In Apple's Terminal app,
+you can also enable **Terminal → Settings → Profiles → Keyboard → Use Option
+as Meta key** and use `Option+Shift+T`.
+
 ## See it in action
 
 ![Modern Midnight Commander demo](2026-10-07%2000-01-04.gif)
@@ -41,6 +46,8 @@ Linux distributions and macOS. The flake exposes `x86_64-linux`, `aarch64-linux`
 `x86_64-darwin` (Intel Mac), and `aarch64-darwin` (Apple Silicon) packages;
 binary availability depends on a cache or your own builder.
 The Nix package includes libzip and enables direct ZIP reading for F5 copies.
+The Nix installation has been tested on both Intel and Apple Silicon Macs.
+Thanks to kozel and hendrys for testing on macOS.
 
 Add this input to your NixOS flake:
 
